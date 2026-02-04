@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Distance & Speed Tracker</title>
+
+<!-- Leaflet Map -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+}
+#map {
+  height: 60vh;
+}
+.panel {
+  padding: 15px;
+  background: white;
+}
+.stat {
+  font-size: 18px;
+  margin: 8px 0;
+}
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  font-size: 16px;
+  background: #0a7cff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+}
+button.stop {
+  background: #d32f2f;
+}
+.note {
+  font-size: 12px;
+  color: gray;
+  margin-top: 8px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="panel">
+  <div class="stat">📍 Speed: <b><span id="speed">0</span> km/h</b></div>
+  <div class="stat">🛣 Distance: <b><span id="distance">0</span> km</b></div>
+  <div class="stat">⏱ Time: <b><span id="time">0</span> sec</b></div>
+
+  <button onclick="startTracking()">Start Tracking</button>
+  <button class="stop" onclick="stopTracking()">Stop Tracking</button>
+
+  <div class="note">
+    By using this service, you consent to GPS tracking. Accuracy depends on device & signal.
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+let map, marker, polyline;
+let watchId = null;
+let path = [];
+let totalDistance = 0;
+let startTime = null;
+
+// Initialize map
+map = L.map('map').setView([20.5937, 78.9629], 5); // India default
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+polyline = L.polyline([], { color: 'blue' }).addTo(map);
+
+// Haversine distance formula
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function startTracking() {
+  if (!navigator.geolocation) {
+    alert("GPS not supported");
+    return;
+  }
+
+  path = [];
+  totalDistance = 0;
+  startTime = Date.now();
+  document.getElementById("distance").innerText = "0";
+  document.getElementById("time").innerText = "0";
+
+  watchId = navigator.geolocation.watchPosition(
+    position => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const speed = position.coords.speed; // m/s
+
+      const current = [lat, lng];
+      path.push(current);
+
+      if (path.length > 1) {
+        const prev = path[path.length - 2];
+        totalDistance += getDistance(prev[0], prev[1], lat, lng);
+      }
+
+      document.getElementById("distance").innerText = totalDistance.toFixed(3);
+      document.getElementById("speed").innerText =
+        speed ? (speed * 3.6).toFixed(1) : "0";
+
+      document.getElementById("time").innerText =
+        Math.floor((Date.now() - startTime) / 1000);
+
+      polyline.addLatLng(current);
+
+      if (!marker) {
+        marker = L.marker(current).addTo(map);
+      } else {
+        marker.setLatLng(current);
+      }
+
+      map.setView(current, 18);
+    },
+    error => {
+      alert("Location error: " + error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000
+    }
+  );
+}
+
+function stopTracking() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    alert("Tracking stopped");
+  }
+}
+</script>
+
+</body>
+</html>
